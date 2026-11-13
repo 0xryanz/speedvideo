@@ -1,0 +1,1114 @@
+openapi: 3.1.0
+info:
+  title: SpeedVideo API
+  version: 1.0.0
+  description: |
+    Netflix-style streaming API. Bearer access tokens are short-lived (15 min
+    by default) and refresh tokens rotate on every use. Personalised endpoints
+    require a profile-scoped access token obtained from
+    `POST /v1/profiles/{profileID}/select`.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Profiles
+  - name: Catalog
+  - name: Library
+  - name: Playback
+  - name: Admin
+    description: |
+      Collection control plane. Guarded by a shared admin token that is held by
+      the operations console's reverse proxy, never by a browser.
+
+paths:
+  /v1/auth/register:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Create an account with a first profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Authenticate and receive an account-scoped session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/auth/refresh:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Rotate a refresh token and issue a new access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "200":
+          description: Rotated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/auth/logout:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Revoke the presented refresh-token family
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "204": { description: Revoked }
+  /v1/me:
+    get:
+      tags: [Profiles]
+      summary: Current account and profiles
+      responses:
+        "200":
+          description: Account snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, profiles]
+                properties:
+                  user: { $ref: "#/components/schemas/User" }
+                  profiles:
+                    type: array
+                    items: { $ref: "#/components/schemas/Profile" }
+                  active_profile_id: { type: string, format: uuid }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/profiles:
+    get:
+      tags: [Profiles]
+      summary: List profiles
+      responses:
+        "200":
+          description: Profiles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profiles:
+                    type: array
+                    items: { $ref: "#/components/schemas/Profile" }
+    post:
+      tags: [Profiles]
+      summary: Create a profile (plan limit applies)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 30 }
+                is_kids: { type: boolean, default: false }
+                avatar_color: { type: string, example: "#E50914" }
+                language: { type: string, enum: [en, zh] }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profile" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/profiles/{profileID}:
+    parameters:
+      - $ref: "#/components/parameters/ProfileID"
+    patch:
+      tags: [Profiles]
+      summary: Update a profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 30 }
+                is_kids: { type: boolean }
+                avatar_color: { type: string }
+                language: { type: string, enum: [en, zh] }
+                autoplay_next: { type: boolean }
+                autoplay_previews: { type: boolean }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profile" }
+    delete:
+      tags: [Profiles]
+      summary: Delete a profile (the last profile cannot be removed)
+      responses:
+        "204": { description: Deleted }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/profiles/{profileID}/select:
+    parameters:
+      - $ref: "#/components/parameters/ProfileID"
+    post:
+      tags: [Profiles]
+      summary: Scope the session to a profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "200":
+          description: Profile-scoped session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /v1/home:
+    get:
+      tags: [Catalog]
+      summary: Home feed; an optional token adds personalised shelves
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Billboard plus ordered shelves
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HomeFeed" }
+        "403": { $ref: "#/components/responses/Error" }
+  /v1/genres:
+    get:
+      tags: [Catalog]
+      summary: List genres
+      responses:
+        "200":
+          description: Genres
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  genres:
+                    type: array
+                    items: { $ref: "#/components/schemas/Genre" }
+  /v1/titles:
+    get:
+      tags: [Catalog]
+      summary: Browse the catalogue
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - { name: kind, in: query, schema: { type: string, enum: [movie, series] } }
+        - { name: genre, in: query, schema: { type: string, example: sci-fi } }
+        - { name: sort, in: query, schema: { type: string, enum: [popularity, newest, name, rating] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        "200":
+          description: Page of titles
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TitlePage" }
+  /v1/titles/{titleID}:
+    parameters:
+      - $ref: "#/components/parameters/TitleID"
+    get:
+      tags: [Catalog]
+      summary: Title detail with seasons, episodes and optional viewer state
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TitleDetail" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/titles/{titleID}/similar:
+    parameters:
+      - $ref: "#/components/parameters/TitleID"
+    get:
+      tags: [Catalog]
+      summary: Titles sharing genres
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Similar titles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/TitleCard" }
+  /v1/search:
+    get:
+      tags: [Catalog]
+      summary: Search titles
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 2 } }
+        - { name: kind, in: query, schema: { type: string, enum: [movie, series] } }
+      responses:
+        "200":
+          description: Matches
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query: { type: string }
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/TitleCard" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /v1/watchlist:
+    get:
+      tags: [Library]
+      summary: Saved titles for the active profile
+      responses:
+        "200":
+          description: Watch list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/TitleCard" }
+  /v1/watchlist/{titleID}:
+    parameters:
+      - $ref: "#/components/parameters/TitleID"
+    put:
+      tags: [Library]
+      summary: Add a title to My List (idempotent)
+      responses:
+        "204": { description: Saved }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Library]
+      summary: Remove a title from My List (idempotent)
+      responses:
+        "204": { description: Removed }
+  /v1/progress/{titleID}:
+    parameters:
+      - $ref: "#/components/parameters/TitleID"
+    put:
+      tags: [Library]
+      summary: Persist playback progress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [duration_seconds]
+              properties:
+                episode_id: { type: string, format: uuid }
+                position_seconds: { type: integer, minimum: 0 }
+                duration_seconds: { type: integer, minimum: 1 }
+      responses:
+        "204": { description: Stored }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /v1/playback/{titleID}:
+    parameters:
+      - $ref: "#/components/parameters/TitleID"
+    get:
+      tags: [Playback]
+      summary: Create a signed playback session (guests allowed; a token adds resume position)
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - { name: episode_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Playback session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Playback" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/downloads/{titleID}:
+    parameters:
+      - $ref: "#/components/parameters/TitleID"
+    get:
+      tags: [Playback]
+      summary: Create a signed offline-download grant
+      parameters:
+        - { name: episode_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Download session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Download" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/downloads/file/{token}:
+    get:
+      tags: [Playback]
+      security: []
+      summary: Redirect a signed download grant to the offline rendition
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "302":
+          description: Signed MP4 rendition
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/playback/stream/{token}:
+    get:
+      tags: [Playback]
+      security: []
+      summary: Redirect a signed token to the CDN manifest
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "302":
+          description: Signed upstream manifest
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /v1/admin/stats:
+    get:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Collection queue overview
+      responses:
+        "200":
+          description: Aggregates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminStats" }
+  /v1/admin/adapters:
+    get:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Supported provider adapters
+      responses:
+        "200":
+          description: Adapter identifiers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { type: string }
+  /v1/admin/sources:
+    get:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: List content sources
+      responses:
+        "200":
+          description: Sources
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AdminSource" }
+    post:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Register a content source
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminSourceInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSource" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/admin/sources/{sourceID}:
+    parameters:
+      - name: sourceID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Load a source
+      responses:
+        "200":
+          description: Source
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSource" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Update a source
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminSourcePatch" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSource" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Delete a source
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/admin/sources/{sourceID}/sync:
+    parameters:
+      - name: sourceID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Queue a full or incremental scan
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                kind: { type: string, enum: [full, incremental], default: incremental }
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminJob" }
+  /v1/admin/sources/{sourceID}/preview:
+    parameters:
+      - name: sourceID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Queue a provider page preview (does not write the catalogue)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query: { type: string }
+                page: { type: integer, minimum: 1, default: 1 }
+      responses:
+        "202":
+          description: Queued; poll GET /v1/admin/jobs/{jobID} for the result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminJob" }
+  /v1/admin/sources/{sourceID}/types:
+    parameters:
+      - name: sourceID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Read the cached provider categories and the selected scope
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSourceTypes" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/admin/sources/{sourceID}/types/discover:
+    parameters:
+      - name: sourceID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Queue a provider category discovery (works on disabled sources)
+      responses:
+        "202":
+          description: Queued; poll GET /v1/admin/jobs/{jobID} for the result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminJob" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/admin/jobs:
+    get:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: List jobs
+      parameters:
+        - { name: source_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, running, done, failed] } }
+        - { name: kind, in: query, schema: { type: string, enum: [full, incremental, title, preview] } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: Jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AdminJob" }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+  /v1/admin/jobs/{jobID}:
+    parameters:
+      - name: jobID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Load a job, including preview payload and result
+      responses:
+        "200":
+          description: Job
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminJob" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/admin/jobs/{jobID}/retry:
+    parameters:
+      - name: jobID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Re-queue a finished job
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminJob" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/admin/titles/{titleID}/refresh:
+    parameters:
+      - $ref: "#/components/parameters/TitleID"
+    post:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: Re-collect one title from its source
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminJob" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/admin/runs:
+    get:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: List executions
+      parameters:
+        - { name: source_id, in: query, schema: { type: string, format: uuid } }
+        - { name: kind, in: query, schema: { type: string, enum: [full, incremental, title, preview] } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: Runs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AdminRun" }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+  /v1/admin/items:
+    get:
+      tags: [Admin]
+      security: [{ adminToken: [] }]
+      summary: List collected provider entries
+      parameters:
+        - { name: source_id, in: query, schema: { type: string, format: uuid } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: removed, in: query, schema: { type: string, enum: ["true", "false"] } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: Items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AdminItem" }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+
+components:
+  schemas:
+    AdminStats:
+      type: object
+      properties:
+        sources: { type: integer }
+        enabled_sources: { type: integer }
+        jobs_pending: { type: integer }
+        jobs_running: { type: integer }
+        jobs_failed: { type: integer }
+        titles: { type: integer }
+        items: { type: integer }
+        items_removed: { type: integer }
+        runs: { type: integer }
+        last_run_at: { type: string, format: date-time }
+    AdminSource:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        slug: { type: string }
+        name: { type: string }
+        adapter: { type: string }
+        api_base: { type: string, format: uri }
+        media_hosts:
+          type: array
+          items: { type: string }
+        enabled: { type: boolean }
+        selected_type_ids:
+          type: array
+          description: Provider category ids to collect; empty means every category.
+          items: { type: string }
+        full_scan_pages:
+          type: integer
+          description: Per-source full-scan page cap per category; 0 uses the collector default.
+        rights_holder: { type: string }
+        license_reference: { type: string }
+        rights_confirmed_at: { type: string, format: date-time }
+        last_synced_at: { type: string, format: date-time }
+        last_sync_note: { type: string }
+    AdminSourceInput:
+      type: object
+      required: [name, api_base, rights_confirmed]
+      properties:
+        slug: { type: string }
+        name: { type: string }
+        adapter: { type: string, default: apple_cms_v10 }
+        api_base: { type: string, format: uri }
+        media_hosts:
+          type: array
+          items: { type: string }
+        rights_holder: { type: string }
+        license_reference: { type: string }
+        rights_confirmed: { type: boolean, description: Must be true; the attestation timestamp is stored. }
+        enabled: { type: boolean }
+    AdminSourcePatch:
+      type: object
+      properties:
+        name: { type: string }
+        api_base: { type: string, format: uri }
+        media_hosts:
+          type: array
+          items: { type: string }
+        rights_holder: { type: string }
+        license_reference: { type: string }
+        enabled: { type: boolean }
+        selected_type_ids:
+          type: array
+          description: Empty array clears the filter and collects every category.
+          items: { type: string }
+        full_scan_pages: { type: integer, minimum: 0, maximum: 10000 }
+    AdminSourceTypes:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AdminCategory" }
+        total:
+          type: integer
+          description: Provider-wide title count from an unfiltered first page.
+        page_size:
+          type: integer
+          description: Items per provider page, used for the page estimate.
+        selected_type_ids:
+          type: array
+          items: { type: string }
+        full_scan_pages: { type: integer }
+    AdminCategory:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        parent_id: { type: string }
+        total: { type: integer, description: Titles in this category; parents roll up their children. }
+    AdminJob:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        source_id: { type: string, format: uuid }
+        kind: { type: string, enum: [full, incremental, title, preview, types] }
+        remote_id: { type: string }
+        status: { type: string, enum: [pending, running, done, failed] }
+        attempts: { type: integer }
+        max_attempts: { type: integer }
+        run_after: { type: string, format: date-time }
+        last_error: { type: string }
+        payload: { description: Opaque collector payload, present on detail. }
+        result: { description: Opaque collector preview snapshot, present on detail. }
+    AdminRun:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        job_id: { type: string, format: uuid }
+        source_id: { type: string, format: uuid }
+        kind: { type: string, enum: [full, incremental, title, preview, types] }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        fetched: { type: integer }
+        created: { type: integer }
+        updated: { type: integer }
+        skipped: { type: integer }
+        failed: { type: integer }
+        error: { type: string }
+    AdminItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        source_id: { type: string, format: uuid }
+        source_name: { type: string }
+        remote_id: { type: string }
+        title_id: { type: string, format: uuid }
+        title_name: { type: string }
+        title_slug: { type: string }
+        content_hash: { type: string }
+        last_seen_at: { type: string, format: date-time }
+        removed_at: { type: string, format: date-time }
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    adminToken:
+      type: http
+      scheme: bearer
+      description: Shared operations token, injected by the console's reverse proxy.
+  parameters:
+    ProfileID:
+      name: profileID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TitleID:
+      name: titleID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Error:
+      description: Problem detail
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, maxLength: 128 }
+        display_name: { type: string, maxLength: 120 }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
+    Session:
+      type: object
+      required: [access_token, refresh_token, token_type, expires_in, user, profiles]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        token_type: { type: string, const: Bearer }
+        expires_in: { type: integer }
+        expires_at: { type: string, format: date-time }
+        active_profile_id: { type: string, format: uuid }
+        user: { $ref: "#/components/schemas/User" }
+        profiles:
+          type: array
+          items: { $ref: "#/components/schemas/Profile" }
+    User:
+      type: object
+      required: [id, email]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        plan: { type: string }
+        role: { type: string }
+        created_at: { type: string, format: date-time }
+    Profile:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        avatar_color: { type: string, example: "#E50914" }
+        is_kids: { type: boolean }
+        language: { type: string }
+        autoplay_next: { type: boolean }
+        autoplay_previews: { type: boolean }
+        maturity_rating: { type: string }
+    Genre:
+      type: object
+      required: [slug, name]
+      properties:
+        slug: { type: string }
+        name: { type: string }
+    Progress:
+      type: object
+      properties:
+        episode_id: { type: string, format: uuid }
+        position_seconds: { type: integer }
+        duration_seconds: { type: integer }
+        percent: { type: integer, minimum: 0, maximum: 100 }
+        completed: { type: boolean }
+    TitleCard:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        kind: { type: string, enum: [movie, series] }
+        release_year: { type: integer }
+        maturity_rating: { type: string }
+        runtime_minutes: { type: integer }
+        poster_path: { type: string }
+        backdrop_path: { type: string }
+        logo_path: { type: string }
+        match_percent: { type: integer }
+        badges:
+          type: array
+          items: { type: string }
+        genres:
+          type: array
+          items: { $ref: "#/components/schemas/Genre" }
+        progress: { $ref: "#/components/schemas/Progress" }
+    Episode:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: integer }
+        season_number: { type: integer }
+        name: { type: string }
+        synopsis: { type: string }
+        runtime_minutes: { type: integer }
+        still_path: { type: string }
+    Season:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: integer }
+        name: { type: string }
+        episodes:
+          type: array
+          items: { $ref: "#/components/schemas/Episode" }
+    TitleDetail:
+      allOf:
+        - $ref: "#/components/schemas/TitleCard"
+        - type: object
+          properties:
+            original_name: { type: string }
+            synopsis: { type: string }
+            tagline: { type: string }
+            director: { type: string }
+            country: { type: string }
+            cast:
+              type: array
+              items: { type: string }
+            trailer_url: { type: string }
+            in_watchlist: { type: boolean }
+            resume: { $ref: "#/components/schemas/Progress" }
+            seasons:
+              type: array
+              items: { $ref: "#/components/schemas/Season" }
+            offers:
+              type: array
+              description: One entry per provider carrying this work. Play the selected entry by its title_id.
+              items: { $ref: "#/components/schemas/TitleOffer" }
+    TitleOffer:
+      type: object
+      required: [title_id, source_name, episode_count, selected]
+      properties:
+        title_id: { type: string }
+        source_id: { type: string }
+        source_name: { type: string, description: Empty for operator-curated titles. }
+        episode_count: { type: integer }
+        selected: { type: boolean }
+    TitlePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TitleCard" }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+        has_more: { type: boolean }
+    HomeRow:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        kind: { type: string, enum: [standard, ranked, continue] }
+        ranked: { type: boolean }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TitleCard" }
+    HomeFeed:
+      type: object
+      required: [billboard, rows]
+      properties:
+        billboard: { $ref: "#/components/schemas/TitleCard" }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/HomeRow" }
+    Playback:
+      type: object
+      required: [manifest_url, title_id, expires_at]
+      properties:
+        manifest_url: { type: string, format: uri }
+        expires_at: { type: string, format: date-time }
+        title_id: { type: string, format: uuid }
+        title_name: { type: string }
+        episode:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            number: { type: integer }
+            season_number: { type: integer }
+            name: { type: string }
+            runtime_minutes: { type: integer }
+        poster_path: { type: string }
+        backdrop_path: { type: string }
+        resume_position_seconds: { type: integer }
+        duration_seconds: { type: integer }
+        audio_tracks:
+          type: array
+          items:
+            type: object
+            properties:
+              language: { type: string }
+              label: { type: string }
+              default: { type: boolean }
+        subtitle_tracks:
+          type: array
+          items:
+            type: object
+            properties:
+              language: { type: string }
+              label: { type: string }
+              default: { type: boolean }
+    Download:
+      type: object
+      required: [download_url, title_id, file_name, expires_at]
+      properties:
+        download_url: { type: string, format: uri }
+        expires_at: { type: string, format: date-time }
+        title_id: { type: string, format: uuid }
+        title_name: { type: string }
+        file_name: { type: string, example: "stranger-things-s01e02.mp4" }
+        episode:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            number: { type: integer }
+            season_number: { type: integer }
+            name: { type: string }
+            runtime_minutes: { type: integer }
+        poster_path: { type: string }
+        backdrop_path: { type: string }
+        duration_seconds: { type: integer }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: not_found }
+            message: { type: string }
+            request_id: { type: string }

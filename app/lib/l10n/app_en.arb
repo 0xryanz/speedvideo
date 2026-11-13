@@ -1,0 +1,212 @@
+{
+  "@@locale": "en",
+  "appName": "SPEEDVIDEO",
+  "appTagline": "Unlimited movies, series and more.",
+  "getStarted": "Get Started",
+  "signIn": "Sign In",
+  "signUp": "Sign Up",
+  "loginRequired": "Sign in required",
+  "guestLibraryTitle": "Sign in to sync your library",
+  "guestLibraryHint": "Your list, watch progress and downloads need an account. Browsing and playback don't.",
+  "watchlistNeedsAccount": "Sign in to save titles to your list.",
+  "downloadNeedsAccount": "Sign in to download titles.",
+  "emptyWatchlistHint": "Open a title and tap \"Add to My List\" to save it here.",
+  "signOut": "Sign Out",
+  "email": "Email",
+  "password": "Password",
+  "displayName": "Display name",
+  "welcomeTitle": "Watch anywhere. Cancel anytime.",
+  "welcomeSubtitle": "Stories that move you, on every screen you own.",
+  "signInSubtitle": "Sign in to continue watching.",
+  "signUpSubtitle": "Create your account. No commitment.",
+  "noAccount": "New to SpeedVideo?",
+  "haveAccount": "Already have an account?",
+  "createAccount": "Create Account",
+  "continueLabel": "Continue",
+  "invalidEmail": "Enter a valid email address.",
+  "passwordMin": "Password must be at least 8 characters.",
+  "nameRequired": "Please enter your name.",
+  "invalidCredentials": "Incorrect email or password.",
+  "emailTaken": "An account with this email already exists.",
+  "somethingWentWrong": "Something went wrong. Please try again.",
+  "retry": "Retry",
+  "tryAgain": "Try Again",
+  "whoIsWatching": "Who's watching?",
+  "manageProfiles": "Manage Profiles",
+  "done": "Done",
+  "addProfile": "Add Profile",
+  "editProfile": "Edit Profile",
+  "profileName": "Profile name",
+  "kidsProfile": "Kids profile",
+  "kidsProfileHint": "Only shows titles suitable for children.",
+  "cancel": "Cancel",
+  "save": "Save",
+  "delete": "Delete",
+  "deleteProfileTitle": "Delete profile?",
+  "deleteProfileMessage": "\"{name}\" and its viewing history will be removed.",
+  "profileLimitReached": "You have reached the profile limit.",
+  "home": "Home",
+  "search": "Search",
+  "newHot": "New & Hot",
+  "myNetflix": "My Netflix",
+  "play": "Play",
+  "resume": "Resume",
+  "moreInfo": "More Info",
+  "myList": "My List",
+  "addToMyList": "Add to My List",
+  "removeFromMyList": "Remove from My List",
+  "top10Today": "Top 10 in Your Country Today",
+  "continueWatching": "Continue Watching",
+  "continueWatchingFor": "Continue Watching for {name}",
+  "@continueWatchingFor": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "newReleases": "New Releases",
+  "myListTitle": "My List",
+  "trendingNow": "Trending Now",
+  "searchHint": "Search shows, movies and more",
+  "searchEmpty": "Find your next story",
+  "searchEmptyHint": "Search by title or genre.",
+  "noResults": "No results for \"{query}\"",
+  "@noResults": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "genres": "Genres",
+  "season": "Season",
+  "seasonNumber": "Season {number}",
+  "@seasonNumber": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "episodes": "Episodes",
+  "moreLikeThis": "More Like This",
+  "cast": "Cast",
+  "director": "Director",
+  "matchLabel": "{percent}% Match",
+  "@matchLabel": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "episode": "Episode",
+  "minutes": "{count} min",
+  "@minutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settings": "Settings",
+  "account": "Account",
+  "language": "Language",
+  "playback": "Playback",
+  "autoplayNext": "Autoplay next episode",
+  "downloads": "Downloads",
+  "downloadsEmpty": "No downloads yet",
+  "downloadsEmptyHint": "Downloaded titles will appear here and play offline.",
+  "help": "Help",
+  "about": "About",
+  "profile": "Profile",
+  "signOutConfirm": "Sign out of SpeedVideo?",
+  "offlineBanner": "You are offline. Check your connection.",
+  "playerError": "This title can't be played right now.",
+  "nextEpisode": "Next Episode",
+  "tvRemoteHint": "OK play/pause · ◀ ▶ seek 10s · Back exit",
+  "skipIntro": "Skip Intro",
+  "loading": "Loading",
+  "noInternet": "No internet connection",
+  "selectProfile": "Select a profile to start watching.",
+  "manage": "Manage",
+  "viewAll": "View all",
+  "recentlyAdded": "Recently Added",
+  "popular": "Popular",
+  "accountEmail": "Email",
+  "plan": "Plan",
+  "memberSince": "Member since",
+  "appearance": "Appearance",
+  "system": "System",
+  "english": "English",
+  "chinese": "简体中文",
+  "aboutBody": "A streaming experience built with Flutter and Go.",
+  "apiUnavailable": "Can't reach SpeedVideo. Is the API running?",
+  "more": "More",
+  "less": "Less",
+  "seasonsCount": "{count} Seasons",
+  "aboutApp": "About SpeedVideo",
+  "@seasonsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "download": "Download",
+  "downloading": "Downloading",
+  "downloaded": "Downloaded",
+  "downloadFailed": "Download failed.",
+  "downloadUnavailable": "This title is not available for download.",
+  "downloadRemoved": "Download removed.",
+  "downloadStarted": "Downloading {name}",
+  "@downloadStarted": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "storedOnDevice": "Saved on this device.",
+  "notDownloaded": "This title is not downloaded on this device.",
+  "deleteDownloadTitle": "Delete download?",
+  "deleteDownloadMessage": "\"{name}\" will be removed from this device.",
+  "@deleteDownloadMessage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "downloadsSize": "{size} on this device",
+  "@downloadsSize": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "noMatches": "No titles match these filters.",
+  "movieLabel": "Movie",
+  "cancelDownload": "Cancel download",
+  "deleteDownload": "Delete download",
+  "switchProfile": "Switch Profile",
+  "emptyListTitle": "Your list is empty",
+  "emptyListHint": "Titles you add to My List appear here.",
+  "recentSearches": "Recent searches",
+  "clear": "Clear",
+  "emptyCatalogueTitle": "Nothing to watch yet",
+  "emptyCatalogueHint": "The catalogue is empty. The collector fills it from your licensed sources.",
+  "playbackSource": "Playback source",
+  "playbackSourceHint": "Choose which provider supplies this stream.",
+  "playbackSourceDefault": "Default",
+  "episodesCount": "{count} episodes",
+  "@episodesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
+}
