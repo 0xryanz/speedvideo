@@ -116,6 +116,48 @@ func TestAppleCMSListTypeFiltersByCategory(t *testing.T) {
 	require.Equal(t, 80, page.Total)
 }
 
+func TestAppleCMSInfersSeasonFromTitle(t *testing.T) {
+	payload := map[string]any{
+		"code": 1,
+		"list": []map[string]any{{
+			"vod_id": "161685", "vod_name": "法律与秩序第二十六季", "type_name": "欧美剧",
+			"vod_play_from": "m3u8",
+			"vod_play_url":  "第01集$https://cdn.example/1.m3u8#第02集$https://cdn.example/2.m3u8",
+		}},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(payload)
+	}))
+	defer server.Close()
+
+	title, err := NewAppleCMS().Detail(
+		context.Background(),
+		&model.Source{APIBase: server.URL},
+		"161685",
+	)
+	require.NoError(t, err)
+	require.Len(t, title.Episodes, 2)
+	for _, episode := range title.Episodes {
+		require.Equal(t, 26, episode.SeasonNumber)
+	}
+	require.Equal(t, 1, title.Episodes[0].Number)
+	require.Equal(t, 2, title.Episodes[1].Number)
+}
+
+func TestTitleSeasonParsing(t *testing.T) {
+	cases := map[string]int{
+		"法律与秩序第二十六季":    26,
+		"某某第十季":         10,
+		"Show Season 4": 4,
+		"Show S03E01":   3,
+		"Example Show":  1,
+		"第一季":           1,
+	}
+	for name, want := range cases {
+		require.Equal(t, want, titleSeason(name), name)
+	}
+}
+
 func TestAppleCMSDropsMalformedRows(t *testing.T) {
 	payload := map[string]any{
 		"code": 1,

@@ -7,6 +7,7 @@ package migrations
 import (
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/go-gormigrate/gormigrate/v2"
 	"gorm.io/gorm"
@@ -127,6 +128,25 @@ func Run(db *gorm.DB, log *slog.Logger) error {
 				// collect only the content types they want, and walk deeper
 				// than the global page limit when they do.
 				return tx.AutoMigrate(&sourcedomain.Source{})
+			},
+		},
+		{
+			ID: "202611130001_job_leases",
+			Migrate: func(tx *gorm.DB) error {
+				// Jobs claimed by a collector now carry a lease. Rows left
+				// "running" before this migration cannot still be executing,
+				// so return them to the queue instead of stranding them.
+				if err := tx.AutoMigrate(&collectordomain.Job{}); err != nil {
+					return err
+				}
+				return tx.Model(&collectordomain.Job{}).
+					Where("status = ?", collectordomain.JobRunning).
+					Updates(map[string]any{
+						"status":           collectordomain.JobPending,
+						"lease_owner":      "",
+						"lease_expires_at": nil,
+						"run_after":        time.Now().UTC(),
+					}).Error
 			},
 		},
 	})

@@ -62,26 +62,30 @@ func main() {
 
 	adapters := adapter.NewRegistry(adapter.NewAppleCMS())
 	pipe := pipeline.New(db, adapters, cfg.AllowInsecure, cfg.MaxPages,
-		cfg.IncrementalPages, cfg.UnchangedWindow)
+		cfg.IncrementalPages, cfg.UnchangedWindow, cfg.FetchConcurrency,
+		cfg.ListConcurrency)
 
 	if cfg.Once {
 		runOnce(ctx, db, log, pipe)
 		return
 	}
 
-	go worker.New(db, pipe, log, cfg.Concurrency, cfg.PollInterval).Run(ctx)
 	go scheduler.New(db, log, cfg.SyncInterval, time.Minute).Run(ctx)
 
 	log.Info("collector started",
 		slog.Int("concurrency", cfg.Concurrency),
+		slog.Int("fetch_concurrency", cfg.FetchConcurrency),
+		slog.Int("list_concurrency", cfg.ListConcurrency),
+		slog.Duration("job_lease", cfg.JobLease),
 		slog.Duration("sync_interval", cfg.SyncInterval),
 	)
-	<-ctx.Done()
+	// Run blocks until the signal handler cancels the context and every
+	// in-flight job has released or finished its lease.
+	worker.New(db, pipe, log, cfg.Concurrency, cfg.PollInterval, cfg.JobLease).Run(ctx)
 	log.Info("collector shutting down")
 }
 
-// runOnce performs a full scan of every enabled source, then returns. It is
-// used by CI and by operators who prefer external scheduling.
+// runOnce performs a full scan of every enabled source, then returns. It is// used by CI and by operators who prefer external scheduling.
 func runOnce(ctx context.Context, db *store.Store, log *slog.Logger, pipe *pipeline.Pipeline) {
 	sources, err := db.ListSources(ctx)
 	if err != nil {

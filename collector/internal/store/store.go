@@ -23,6 +23,10 @@ import (
 // ErrNoJob is returned by Claim when the queue is empty.
 var ErrNoJob = errors.New("no pending collection job")
 
+// ErrLeaseLost is returned by Finish when another collector now owns the job.
+// The caller must leave it alone: the new lease holder will complete it.
+var ErrLeaseLost = errors.New("collection job lease is no longer held")
+
 // Store wraps the database handle.
 type Store struct {
 	db *gorm.DB
@@ -47,8 +51,8 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("acquire sql handle: %w", err)
 	}
-	sqlDB.SetMaxOpenConns(10)
-	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetMaxOpenConns(20)
+	sqlDB.SetMaxIdleConns(10)
 	sqlDB.SetConnMaxLifetime(30 * time.Minute)
 	if err := sqlDB.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("ping database: %w", err)
@@ -138,19 +142,36 @@ func (s *Store) Enqueue(ctx context.Context, sourceID, kind, remoteID string) (*
 }
 
 // Claim atomically leases the next runnable job.
-func (s *Store) Claim(ctx context.Context) (*model.Job, error) {
+//
+// A pending job is runnable when its run_after has passed. A running job is
+// runnable again when its lease expired: that means the collector executing it
+// crashed or was restarted, and the work must not be lost. Live jobs are left
+// alone, so several collectors can share the queue safely.
+func (s *Store) Claim(
+	ctx context.Context,
+	owner string,
+	lease time.Duration,
+) (*model.Job, error) {
+	now := time.Now().UTC()
 	var job model.Job
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
-			Where("status = ? AND run_after <= ?", "pending", time.Now().UTC()).
+			Where(
+				"(status = ? AND run_after <= ?) OR (status = ? AND (lease_expires_at IS NULL OR lease_expires_at < ?))",
+				"pending", now, "running", now,
+			).
 			Order("run_after ASC").
 			First(&job).Error
 		if err != nil {
 			return err
 		}
+		expires := now.Add(lease)
 		return tx.Model(&job).Updates(map[string]any{
-			"status":   "running",
-			"attempts": job.Attempts + 1,
+			"status":           "running",
+			"attempts":         job.Attempts + 1,
+			"lease_owner":      owner,
+			"lease_expires_at": expires,
+			"last_error":       "",
 		}).Error
 	})
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -161,15 +182,62 @@ func (s *Store) Claim(ctx context.Context) (*model.Job, error) {
 	}
 	job.Attempts++
 	job.Status = "running"
+	job.LeaseOwner = owner
+	expires := now.Add(lease)
+	job.LeaseExpiresAt = &expires
 	return &job, nil
 }
 
+// RenewLease extends a running job's lease. It reports false when the job is no
+// longer held by this collector, which means another worker took it over.
+func (s *Store) RenewLease(
+	ctx context.Context,
+	jobID, owner string,
+	lease time.Duration,
+) (bool, error) {
+	result := s.db.WithContext(ctx).Model(&model.Job{}).
+		Where("id = ? AND status = ? AND lease_owner = ?", jobID, "running", owner).
+		Update("lease_expires_at", time.Now().UTC().Add(lease))
+	if result.Error != nil {
+		return false, fmt.Errorf("renew job lease: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
+}
+
 // Finish completes a job, retrying with backoff until it runs out of attempts.
-func (s *Store) Finish(ctx context.Context, job *model.Job, jobErr error) error {
-	updates := map[string]any{"last_error": ""}
-	if jobErr == nil {
+//
+// interrupted marks a graceful shutdown: the work goes straight back to the
+// queue instead of being treated as a provider failure. Updates are scoped to
+// the lease owner so a worker that lost its lease cannot overwrite the new
+// owner's result.
+func (s *Store) Finish(
+	ctx context.Context,
+	job *model.Job,
+	owner string,
+	interrupted bool,
+	jobErr error,
+) error {
+	updates := map[string]any{
+		"last_error":       "",
+		"lease_owner":      "",
+		"lease_expires_at": nil,
+	}
+	switch {
+	case jobErr == nil:
 		updates["status"] = "done"
-	} else {
+	case interrupted:
+		updates["status"] = "pending"
+		updates["run_after"] = time.Now().UTC()
+		updates["last_error"] = "interrupted by collector shutdown"
+		// The claim counted this attempt; a graceful stop is not a failure, so
+		// hand the attempt back rather than exhausting the retry budget after a
+		// few deployments.
+		attempts := job.Attempts - 1
+		if attempts < 0 {
+			attempts = 0
+		}
+		updates["attempts"] = attempts
+	default:
 		updates["last_error"] = truncate(jobErr.Error(), 600)
 		if job.Attempts >= job.MaxAttempts {
 			updates["status"] = "failed"
@@ -178,9 +246,14 @@ func (s *Store) Finish(ctx context.Context, job *model.Job, jobErr error) error 
 			updates["run_after"] = time.Now().UTC().Add(time.Duration(job.Attempts) * time.Minute)
 		}
 	}
-	if err := s.db.WithContext(ctx).Model(&model.Job{}).Where("id = ?", job.ID).
-		Updates(updates).Error; err != nil {
-		return fmt.Errorf("finish job: %w", err)
+	result := s.db.WithContext(ctx).Model(&model.Job{}).
+		Where("id = ? AND status = ? AND lease_owner = ?", job.ID, "running", owner).
+		Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("finish job: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrLeaseLost
 	}
 	return nil
 }

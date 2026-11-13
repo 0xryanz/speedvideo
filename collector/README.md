@@ -39,7 +39,7 @@ admin 控制台 ──▶ API（控制面）──▶ PostgreSQL ◀──领取
   不勾选任何类型表示采集全部。
 - **全量即范围**：带类型选择的全量扫描会把未选中的旧条目标记为下架，
   因此切换类型后跑一次「全量」即可让片库只保留目标类型。
-  抓取结果为 0 时跳过了下架步骤，避免误清空。
+  抓取结果为 0 或本轮有任何详情失败时跳过了下架步骤，避免源站抖动误清空。
 
 ## 目录
 
@@ -80,17 +80,37 @@ Docker Compose 会构建本目录并以 `collector` 服务运行，无宿主端�
 | `APP_ENV` | 运行环境 | `development` |
 | `DATABASE_URL` | PostgreSQL 连接串 | 必填 |
 | `LOG_LEVEL` | 日志级别 | `info` |
-| `COLLECTOR_CONCURRENCY` | 并发任务数 | `2` |
+| `COLLECTOR_CONCURRENCY` | 并发任务数（多个来源/任务同时跑） | `2` |
+| `COLLECTOR_FETCH_CONCURRENCY` | 单个任务内并发详情请求数 | `8` |
+| `COLLECTOR_LIST_CONCURRENCY` | 单个分类内并发列表页请求数 | `4` |
 | `COLLECTOR_POLL_INTERVAL` | 队列轮询间隔 | `10s` |
 | `COLLECTOR_SYNC_INTERVAL` | 每个来源的自动增量周期 | `6h` |
 | `COLLECTOR_MAX_PAGES` | 全量扫描页数上限（每个类型） | `50` |
 | `COLLECTOR_INCREMENTAL_PAGES` | 增量扫描页数 | `3` |
 | `COLLECTOR_UNCHANGED_WINDOW` | 窗口内已抓条目跳过详情 | `12h` |
+| `COLLECTOR_JOB_LEASE` | 任务租约时长；进程崩溃后超过该时长任务可被重新领取 | `60s` |
 | `COLLECTOR_ALLOW_INSECURE` | 仅开发：允许 http 源站 | `false` |
 | `COLLECTOR_ONCE` | 跑完当前队列后退出 | `false` |
 
 `COLLECTOR_MAX_PAGES=50`、AppleCMS 每页约 20 条，默认一轮约 1000 条。
 需要更深的历史内容时调大页数，或在控制台的「采集类型」里按类型设置上限。
+
+### 速度调优
+
+- 详情请求默认 8 路并发；列表页在拿到 `pagecount` 后并行抓取。
+- 增量任务按页批量查询 `last_seen_at`，不再为每条内容单独查库。
+- HTTP 连接复用（keep-alive、HTTP/2），并对瞬时失败做 3 次短退避重试。
+- 源站限流时先降低 `COLLECTOR_FETCH_CONCURRENCY` / `COLLECTOR_LIST_CONCURRENCY`，
+  再考虑提高页数；并发过高会触发源站封禁。
+- 数据库连接池已提升到 20，配合并发写入。
+
+### 任务不丢失
+
+- 领取任务时会写入租约（`lease_owner` + `lease_expires_at`），运行期间定时续租。
+- 收到 `SIGINT` / `SIGTERM` 时，正在执行的任务会被放回队列，进程会等待收尾完成再退出。
+- 进程被强杀或容器崩溃时，租约到期后任务会被重新领取并继续执行。
+- 迁移前遗留的 `running` 任务会在启动时自动回到 `pending`。
+- 多个采集实例可以共享队列，租约未过期的任务不会被重复执行。
 
 ## 测试
 

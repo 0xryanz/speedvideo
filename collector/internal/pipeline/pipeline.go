@@ -28,6 +28,32 @@ type Stats struct {
 	Failed  int `json:"failed"`
 }
 
+// hostSet collects media hosts discovered by parallel workers.
+type hostSet struct {
+	mu    sync.Mutex
+	hosts map[string]struct{}
+}
+
+func newHostSet() *hostSet {
+	return &hostSet{hosts: make(map[string]struct{})}
+}
+
+func (h *hostSet) add(host string) {
+	h.mu.Lock()
+	h.hosts[host] = struct{}{}
+	h.mu.Unlock()
+}
+
+func (h *hostSet) list() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]string, 0, len(h.hosts))
+	for host := range h.hosts {
+		out = append(out, host)
+	}
+	return out
+}
+
 // Pipeline executes collection jobs.
 type Pipeline struct {
 	store            *store.Store
@@ -36,6 +62,8 @@ type Pipeline struct {
 	maxPages         int
 	incrementalPages int
 	unchangedWindow  time.Duration
+	fetchConcurrency int
+	listConcurrency  int
 }
 
 // New builds a pipeline.
@@ -46,7 +74,15 @@ func New(
 	maxPages int,
 	incrementalPages int,
 	unchangedWindow time.Duration,
+	fetchConcurrency int,
+	listConcurrency int,
 ) *Pipeline {
+	if fetchConcurrency < 1 {
+		fetchConcurrency = 1
+	}
+	if listConcurrency < 1 {
+		listConcurrency = 1
+	}
 	return &Pipeline{
 		store:            store,
 		adapters:         adapters,
@@ -54,6 +90,8 @@ func New(
 		maxPages:         maxPages,
 		incrementalPages: incrementalPages,
 		unchangedWindow:  unchangedWindow,
+		fetchConcurrency: fetchConcurrency,
+		listConcurrency:  listConcurrency,
 	}
 }
 
@@ -75,11 +113,12 @@ func (p *Pipeline) Run(ctx context.Context, job *model.Job) (Stats, error) {
 		return stats, fmt.Errorf("unsupported adapter %q", source.Adapter)
 	}
 
-	hosts := map[string]struct{}{}
+	hosts := newHostSet()
 	switch job.Kind {
 	case "title":
 		stats.Fetched = 1
-		if err := p.collectOne(ctx, source, impl, job.RemoteID, &stats, hosts); err != nil {
+		outcome, err := p.collectOne(ctx, source, impl, job.RemoteID, hosts)
+		if err != nil {
 			stats.Failed++
 			slog.Error("title refresh failed",
 				slog.String("source", source.Slug),
@@ -87,6 +126,7 @@ func (p *Pipeline) Run(ctx context.Context, job *model.Job) (Stats, error) {
 				slog.String("error", err.Error()))
 			return stats, err
 		}
+		countOutcome(&stats, outcome)
 	case "preview":
 		if err := p.preview(ctx, source, impl, job, &stats); err != nil {
 			return stats, err
@@ -105,7 +145,7 @@ func (p *Pipeline) Run(ctx context.Context, job *model.Job) (Stats, error) {
 		return stats, fmt.Errorf("unknown job kind %q", job.Kind)
 	}
 
-	if err := p.commitHosts(ctx, source.ID, hosts); err != nil {
+	if err := p.commitHosts(ctx, source.ID, hosts.list()); err != nil {
 		return stats, err
 	}
 	note := fmt.Sprintf("fetched %d, created %d, updated %d, skipped %d, failed %d",
@@ -128,7 +168,7 @@ func (p *Pipeline) scan(
 	impl adapter.Adapter,
 	kind string,
 	stats *Stats,
-	hosts map[string]struct{},
+	hosts *hostSet,
 ) error {
 	full := kind == "full"
 	pages := p.incrementalPages
@@ -151,52 +191,35 @@ func (p *Pipeline) scan(
 	started := time.Now().UTC()
 	seen := map[string]struct{}{}
 	for _, typeID := range scope {
-		for page := 1; pages <= 0 || page <= pages; page++ {
-			var (
-				result *adapter.Page
-				err    error
-			)
-			if typeID == "" {
-				result, err = impl.List(ctx, source, page)
-			} else {
-				result, err = impl.ListType(ctx, source, typeID, page)
-			}
-			if err != nil {
-				return fmt.Errorf("list type %q page %d: %w", typeID, page, err)
-			}
-			if len(result.Items) == 0 {
-				break
-			}
+		results, err := p.fetchTypePages(ctx, source, impl, typeID, pages)
+		if err != nil {
+			return err
+		}
+		for _, result := range results {
+			ids := make([]string, 0, len(result.Items))
 			for _, item := range result.Items {
 				if _, ok := seen[item.RemoteID]; ok {
 					continue
 				}
 				seen[item.RemoteID] = struct{}{}
 				stats.Fetched++
-				if kind == "incremental" && p.recentlySeen(ctx, source.ID, item.RemoteID) {
-					stats.Skipped++
-					continue
-				}
-				if err := p.collectOne(ctx, source, impl, item.RemoteID, stats, hosts); err != nil {
-					stats.Failed++
-					slog.Warn("provider row rejected",
-						slog.String("source", source.Slug),
-						slog.String("remote_id", item.RemoteID),
-						slog.String("error", err.Error()))
-					continue
-				}
+				ids = append(ids, item.RemoteID)
 			}
-			if result.PageCount > 0 && page >= result.PageCount {
-				break
+			if len(ids) == 0 {
+				continue
 			}
+			if kind == "incremental" {
+				ids = p.dropRecentlySeen(ctx, source.ID, ids, stats, source.Slug)
+			}
+			p.collectBatch(ctx, source, impl, ids, stats, hosts)
 		}
 	}
 
-	if full && stats.Fetched > 0 {
+	if full && stats.Fetched > 0 && stats.Failed == 0 {
 		// A full scan defines the source's authoritative scope, so rows that
 		// were not seen — including categories the operator deselected — are
-		// tombstoned. The fetched guard prevents an empty provider response
-		// from wiping the catalogue.
+		// tombstoned. The guards prevent an empty provider response, or a run
+		// where every detail request failed, from wiping the catalogue.
 		if removed, err := p.store.MarkMissing(ctx, source.ID, started); err == nil {
 			stats.Skipped += removed
 		}
@@ -446,20 +469,85 @@ func (p *Pipeline) collectOne(
 	source *model.Source,
 	impl adapter.Adapter,
 	remoteID string,
-	stats *Stats,
-	hosts map[string]struct{},
-) error {
-	title, err := impl.Detail(ctx, source, remoteID)
+	hosts *hostSet,
+) (store.Outcome, error) {
+	title, err := p.detail(ctx, source, impl, remoteID)
 	if err != nil {
-		return err
+		return store.OutcomeUnchanged, err
 	}
 	if err := p.validate(source, title, hosts); err != nil {
-		return err
+		return store.OutcomeUnchanged, err
 	}
 	_, outcome, err := p.store.UpsertTitle(ctx, source, title, hashOf(title))
 	if err != nil {
-		return err
+		return store.OutcomeUnchanged, err
 	}
+	return outcome, nil
+}
+
+// collectBatch fetches details for one list page with bounded parallelism.
+// Every worker writes independently; only the shared counters and host set
+// need a lock.
+func (p *Pipeline) collectBatch(
+	ctx context.Context,
+	source *model.Source,
+	impl adapter.Adapter,
+	remoteIDs []string,
+	stats *Stats,
+	hosts *hostSet,
+) {
+	if len(remoteIDs) == 0 {
+		return
+	}
+	workers := p.fetchConcurrency
+	if workers > len(remoteIDs) {
+		workers = len(remoteIDs)
+	}
+	if workers < 1 {
+		workers = 1
+	}
+
+	jobs := make(chan string)
+	var (
+		wg sync.WaitGroup
+		mu sync.Mutex
+	)
+	for index := 0; index < workers; index++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for remoteID := range jobs {
+				outcome, err := p.collectOne(ctx, source, impl, remoteID, hosts)
+				mu.Lock()
+				if err != nil {
+					stats.Failed++
+				} else {
+					countOutcome(stats, outcome)
+				}
+				mu.Unlock()
+				if err != nil {
+					slog.Warn("provider row rejected",
+						slog.String("source", source.Slug),
+						slog.String("remote_id", remoteID),
+						slog.String("error", err.Error()))
+				}
+			}
+		}()
+	}
+	for _, remoteID := range remoteIDs {
+		select {
+		case jobs <- remoteID:
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return
+		}
+	}
+	close(jobs)
+	wg.Wait()
+}
+
+func countOutcome(stats *Stats, outcome store.Outcome) {
 	switch outcome {
 	case store.OutcomeCreated:
 		stats.Created++
@@ -468,7 +556,192 @@ func (p *Pipeline) collectOne(
 	case store.OutcomeUnchanged:
 		stats.Skipped++
 	}
-	return nil
+}
+
+// dropRecentlySeen replaces one SELECT per title with a single indexed lookup
+// for the whole page, which is the difference between 20 queries and one on an
+// incremental run.
+func (p *Pipeline) dropRecentlySeen(
+	ctx context.Context,
+	sourceID string,
+	remoteIDs []string,
+	stats *Stats,
+	sourceSlug string,
+) []string {
+	if p.unchangedWindow <= 0 || len(remoteIDs) == 0 {
+		return remoteIDs
+	}
+	since := time.Now().UTC().Add(-p.unchangedWindow)
+	seen, err := p.store.RecentlySeen(ctx, sourceID, remoteIDs, since)
+	if err != nil {
+		slog.Warn("batch recently-seen lookup failed; fetching details",
+			slog.String("source", sourceSlug),
+			slog.String("error", err.Error()))
+		return remoteIDs
+	}
+	kept := remoteIDs[:0]
+	for _, remoteID := range remoteIDs {
+		if _, ok := seen[remoteID]; ok {
+			stats.Skipped++
+			continue
+		}
+		kept = append(kept, remoteID)
+	}
+	return kept
+}
+
+// fetchTypePages reads one category's pages. The first page establishes the
+// page count; the remaining pages are fetched with bounded parallelism. When a
+// provider omits `pagecount`, paging falls back to the previous sequential
+// scan so a missing count cannot turn into a burst of empty requests.
+func (p *Pipeline) fetchTypePages(
+	ctx context.Context,
+	source *model.Source,
+	impl adapter.Adapter,
+	typeID string,
+	limit int,
+) ([]*adapter.Page, error) {
+	first, err := p.listPage(ctx, source, impl, typeID, 1)
+	if err != nil {
+		return nil, fmt.Errorf("list type %q page 1: %w", typeID, err)
+	}
+	if len(first.Items) == 0 {
+		return []*adapter.Page{first}, nil
+	}
+	if first.PageCount <= 0 {
+		pages := []*adapter.Page{first}
+		for page := 2; limit <= 0 || page <= limit; page++ {
+			next, err := p.listPage(ctx, source, impl, typeID, page)
+			if err != nil {
+				return nil, fmt.Errorf("list type %q page %d: %w", typeID, page, err)
+			}
+			if len(next.Items) == 0 {
+				break
+			}
+			pages = append(pages, next)
+		}
+		return pages, nil
+	}
+
+	maxPage := first.PageCount
+	if limit > 0 && limit < maxPage {
+		maxPage = limit
+	}
+	if maxPage <= 1 {
+		return []*adapter.Page{first}, nil
+	}
+
+	results := make([]*adapter.Page, maxPage+1)
+	results[1] = first
+	workers := p.listConcurrency
+	if workers > maxPage-1 {
+		workers = maxPage - 1
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	jobs := make(chan int)
+	errCh := make(chan error, 1)
+	var wg sync.WaitGroup
+	for index := 0; index < workers; index++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for page := range jobs {
+				next, err := p.listPage(runCtx, source, impl, typeID, page)
+				if err != nil {
+					select {
+					case errCh <- fmt.Errorf("list type %q page %d: %w", typeID, page, err):
+					default:
+					}
+					cancel()
+					return
+				}
+				results[page] = next
+			}
+		}()
+	}
+	for page := 2; page <= maxPage; page++ {
+		select {
+		case jobs <- page:
+		case <-runCtx.Done():
+		}
+	}
+	close(jobs)
+	wg.Wait()
+	select {
+	case err := <-errCh:
+		return nil, err
+	default:
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	pages := make([]*adapter.Page, 0, maxPage)
+	for page := 1; page <= maxPage; page++ {
+		if results[page] == nil {
+			break
+		}
+		pages = append(pages, results[page])
+	}
+	return pages, nil
+}
+
+func (p *Pipeline) listPage(
+	ctx context.Context,
+	source *model.Source,
+	impl adapter.Adapter,
+	typeID string,
+	page int,
+) (*adapter.Page, error) {
+	return withRetry(ctx, func() (*adapter.Page, error) {
+		if typeID == "" {
+			return impl.List(ctx, source, page)
+		}
+		return impl.ListType(ctx, source, typeID, page)
+	})
+}
+
+func (p *Pipeline) detail(
+	ctx context.Context,
+	source *model.Source,
+	impl adapter.Adapter,
+	remoteID string,
+) (*adapter.Title, error) {
+	return withRetry(ctx, func() (*adapter.Title, error) {
+		return impl.Detail(ctx, source, remoteID)
+	})
+}
+
+// withRetry rides out transient provider failures (rate limits, connection
+// resets) with a short bounded backoff. Permanent errors still surface after
+// the last attempt and are counted as failed rows.
+func withRetry[T any](ctx context.Context, fn func() (T, error)) (T, error) {
+	var zero T
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		value, err := fn()
+		if err == nil {
+			return value, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil {
+			return zero, ctx.Err()
+		}
+		if attempt == 2 {
+			break
+		}
+		delay := time.Duration(200*(1<<attempt)) * time.Millisecond
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return zero, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return zero, lastErr
 }
 
 // validate refuses renditions the deployment cannot play and records the hosts
@@ -476,7 +749,7 @@ func (p *Pipeline) collectOne(
 func (p *Pipeline) validate(
 	source *model.Source,
 	title *adapter.Title,
-	hosts map[string]struct{},
+	hosts *hostSet,
 ) error {
 	urls := make([]string, 0, len(title.Episodes)+1)
 	if title.VideoURL != "" {
@@ -496,7 +769,7 @@ func (p *Pipeline) validate(
 		if parsed.Scheme != "https" && !(p.allowInsecure && parsed.Scheme == "http") {
 			return fmt.Errorf("rendition must use https")
 		}
-		hosts[strings.ToLower(parsed.Hostname())] = struct{}{}
+		hosts.add(strings.ToLower(parsed.Hostname()))
 	}
 	return nil
 }
@@ -504,24 +777,12 @@ func (p *Pipeline) validate(
 func (p *Pipeline) commitHosts(
 	ctx context.Context,
 	sourceID string,
-	hosts map[string]struct{},
+	hosts []string,
 ) error {
 	if len(hosts) == 0 {
 		return nil
 	}
-	list := make([]string, 0, len(hosts))
-	for host := range hosts {
-		list = append(list, host)
-	}
-	return p.store.AddMediaHosts(ctx, sourceID, list)
-}
-
-func (p *Pipeline) recentlySeen(ctx context.Context, sourceID, remoteID string) bool {
-	item, err := p.store.FindItem(ctx, sourceID, remoteID)
-	if err != nil || item.RemovedAt != nil {
-		return false
-	}
-	return time.Since(item.LastSeenAt) < p.unchangedWindow
+	return p.store.AddMediaHosts(ctx, sourceID, hosts)
 }
 
 // hashOf captures everything that should trigger a catalogue write.

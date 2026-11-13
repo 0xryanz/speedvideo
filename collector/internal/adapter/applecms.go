@@ -21,9 +21,23 @@ type AppleCMS struct {
 }
 
 // NewAppleCMS builds the adapter with a bounded HTTP client.
+//
+// The transport is tuned for many concurrent detail requests to one host:
+// keep-alive connections are reused up to MaxConnsPerHost so a full scan does
+// not pay a new TCP/TLS handshake per title.
 func NewAppleCMS() *AppleCMS {
 	return &AppleCMS{client: &http.Client{
 		Timeout: 20 * time.Second,
+		Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			MaxIdleConns:          128,
+			MaxIdleConnsPerHost:   32,
+			MaxConnsPerHost:       32,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: time.Second,
+			ForceAttemptHTTP2:     true,
+		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
 				return http.ErrUseLastResponse
@@ -235,7 +249,7 @@ func (item vodItem) toTitle() (Title, error) {
 	}
 	year, _ := strconv.Atoi(strings.TrimSpace(string(item.VodYear)))
 
-	episodes := pickPlaylist(item.VodPlayFrom, item.VodPlayURL)
+	episodes := pickPlaylist(item.VodPlayFrom, item.VodPlayURL, titleSeason(name))
 	kind := inferKind(item.TypeName, episodes)
 	title := Title{
 		RemoteID:     remoteID,
@@ -259,7 +273,7 @@ func (item vodItem) toTitle() (Title, error) {
 	return title, nil
 }
 
-func pickPlaylist(from, raw string) []Episode {
+func pickPlaylist(from, raw string, defaultSeason int) []Episode {
 	groups := strings.Split(raw, "$$$")
 	lines := strings.Split(from, "$$$")
 	bestScore := -1
@@ -268,7 +282,7 @@ func pickPlaylist(from, raw string) []Episode {
 		if strings.TrimSpace(group) == "" {
 			continue
 		}
-		episodes := parseGroup(group)
+		episodes := parseGroup(group, defaultSeason)
 		if len(episodes) == 0 {
 			continue
 		}
@@ -294,7 +308,81 @@ func pickPlaylist(from, raw string) []Episode {
 
 var episodeNumber = regexp.MustCompile(`(?i)(?:第\s*|ep|e)\s*(\d{1,4})\s*(?:集|话|期)?`)
 
-func parseGroup(group string) []Episode {
+// AppleCMS lists every playable row without a season field. Many providers
+// publish one title per season and put the season in the title ("…第二十六季",
+// "Season 26"). Read it so the season picker shows 26 instead of a hardcoded 1.
+var (
+	arabicSeason  = regexp.MustCompile(`(?i)第\s*([0-9]{1,3})\s*季|season\s*([0-9]{1,3})`)
+	chineseSeason = regexp.MustCompile(`第\s*([零〇一二三四五六七八九十百两]+)\s*季`)
+	shortSeason   = regexp.MustCompile(`(?i)(?:^|[\s._\-\[(])s(\d{1,2})(?:[\s._\-eE]|$)`)
+)
+
+// seasonNumber extracts an explicit season from a title or episode name. It
+// returns 0 when the name carries no season marker.
+func seasonNumber(name string) int {
+	if match := arabicSeason.FindStringSubmatch(name); len(match) > 0 {
+		for _, part := range match[1:] {
+			if part == "" {
+				continue
+			}
+			parsed, err := strconv.Atoi(part)
+			if err == nil && parsed > 0 {
+				return parsed
+			}
+		}
+	}
+	if match := chineseSeason.FindStringSubmatch(name); len(match) == 2 {
+		if parsed := chineseNumber(match[1]); parsed > 0 {
+			return parsed
+		}
+	}
+	if match := shortSeason.FindStringSubmatch(name); len(match) == 2 {
+		if parsed, err := strconv.Atoi(match[1]); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	return 0
+}
+
+// titleSeason is the fallback season for a title's episodes. A title without a
+// marker keeps the historical default of season one.
+func titleSeason(name string) int {
+	if parsed := seasonNumber(name); parsed > 0 {
+		return parsed
+	}
+	return 1
+}
+
+func chineseNumber(value string) int {
+	digits := map[rune]int{
+		'零': 0, '〇': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4,
+		'五': 5, '六': 6, '七': 7, '八': 8, '九': 9,
+	}
+	total, current := 0, 0
+	for _, char := range value {
+		switch char {
+		case '十':
+			if current == 0 {
+				current = 1
+			}
+			total += current * 10
+			current = 0
+		case '百':
+			if current == 0 {
+				current = 1
+			}
+			total += current * 100
+			current = 0
+		default:
+			if digit, ok := digits[char]; ok {
+				current = digit
+			}
+		}
+	}
+	return total + current
+}
+
+func parseGroup(group string, defaultSeason int) []Episode {
 	parts := strings.Split(group, "#")
 	episodes := make([]Episode, 0, len(parts))
 	for index, part := range parts {
@@ -318,11 +406,15 @@ func parseGroup(group string) []Episode {
 				number = parsed
 			}
 		}
+		season := defaultSeason
+		if parsed := seasonNumber(name); parsed > 0 {
+			season = parsed
+		}
 		if name == "" {
 			name = fmt.Sprintf("Episode %d", number)
 		}
 		episodes = append(episodes, Episode{
-			SeasonNumber: 1,
+			SeasonNumber: season,
 			Number:       number,
 			Name:         name,
 			URL:          link,

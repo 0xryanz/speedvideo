@@ -20,10 +20,18 @@ type Config struct {
 	SyncInterval time.Duration `env:"COLLECTOR_SYNC_INTERVAL"     envDefault:"6h"`
 	// MaxPages caps a full scan; 0 means unbounded.
 	MaxPages int `env:"COLLECTOR_MAX_PAGES"         envDefault:"50"`
+	// FetchConcurrency is the number of provider detail requests in flight.
+	FetchConcurrency int `env:"COLLECTOR_FETCH_CONCURRENCY" envDefault:"8"`
+	// ListConcurrency is the number of list pages fetched in parallel.
+	ListConcurrency int `env:"COLLECTOR_LIST_CONCURRENCY"  envDefault:"4"`
 	// IncrementalPages caps how many newest pages an incremental run walks.
 	IncrementalPages int `env:"COLLECTOR_INCREMENTAL_PAGES" envDefault:"3"`
 	// UnchangedWindow skips detail fetches for rows seen within this window.
 	UnchangedWindow time.Duration `env:"COLLECTOR_UNCHANGED_WINDOW"  envDefault:"12h"`
+	// JobLease is how long a claimed job stays reserved. It is renewed while
+	// the job runs; after a crash the job becomes claimable again when the
+	// lease expires, so unfinished work is never stranded.
+	JobLease time.Duration `env:"COLLECTOR_JOB_LEASE"       envDefault:"60s"`
 	// AllowInsecure permits plain-http provider endpoints and renditions. It is
 	// rejected outside development.
 	AllowInsecure bool `env:"COLLECTOR_ALLOW_INSECURE"    envDefault:"false"`
@@ -49,6 +57,24 @@ func Load() (*Config, error) {
 	}
 	if cfg.IncrementalPages < 1 {
 		cfg.IncrementalPages = 1
+	}
+	if cfg.FetchConcurrency < 1 {
+		cfg.FetchConcurrency = 1
+	}
+	if cfg.FetchConcurrency > 32 {
+		cfg.FetchConcurrency = 32
+	}
+	if cfg.ListConcurrency < 1 {
+		cfg.ListConcurrency = 1
+	}
+	if cfg.ListConcurrency > 16 {
+		cfg.ListConcurrency = 16
+	}
+	if cfg.JobLease < 5*time.Second {
+		cfg.JobLease = 5 * time.Second
+	}
+	if cfg.JobLease > 30*time.Minute {
+		cfg.JobLease = 30 * time.Minute
 	}
 	if cfg.Production() && cfg.AllowInsecure {
 		return nil, fmt.Errorf(

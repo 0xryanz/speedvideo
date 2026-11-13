@@ -39,6 +39,11 @@ type Job struct {
 	MaxAttempts int       `gorm:"not null;default:3"       json:"max_attempts"`
 	RunAfter    time.Time `gorm:"not null;index"           json:"run_after"`
 	LastError   string    `gorm:"size:600"                 json:"last_error,omitempty"`
+	// LeaseOwner and LeaseExpiresAt let the API and collectors tell a live
+	// execution apart from one interrupted by a crash or restart. The lease is
+	// renewed while the job runs and expires when the process stops.
+	LeaseOwner     string     `gorm:"size:120" json:"-"`
+	LeaseExpiresAt *time.Time `              json:"-"`
 }
 
 // TableName keeps the collector's table name explicit.

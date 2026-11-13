@@ -50,6 +50,8 @@ services:
     build:
       context: ./collector
     restart: unless-stopped
+    # Give an in-flight job time to release its lease on SIGTERM.
+    stop_grace_period: 30s
     depends_on:
       db:
         condition: service_healthy
@@ -59,7 +61,10 @@ services:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgres://speedvideo:${POSTGRES_PASSWORD:-speedvideo-local-only}@db:5432/speedvideo?sslmode=disable
       COLLECTOR_SYNC_INTERVAL: ${COLLECTOR_SYNC_INTERVAL:-6h}
-      COLLECTOR_CONCURRENCY: "2"
+      COLLECTOR_CONCURRENCY: "${COLLECTOR_CONCURRENCY:-2}"
+      COLLECTOR_FETCH_CONCURRENCY: "${COLLECTOR_FETCH_CONCURRENCY:-8}"
+      COLLECTOR_LIST_CONCURRENCY: "${COLLECTOR_LIST_CONCURRENCY:-4}"
+      COLLECTOR_JOB_LEASE: "${COLLECTOR_JOB_LEASE:-60s}"
       # Development only: allows a local fixture over http.
       COLLECTOR_ALLOW_INSECURE: "${COLLECTOR_ALLOW_INSECURE:-false}"
     extra_hosts:

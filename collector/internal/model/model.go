@@ -147,6 +147,11 @@ type Job struct {
 	MaxAttempts int       `gorm:"not null;default:3"       json:"max_attempts"`
 	RunAfter    time.Time `gorm:"not null;index"           json:"run_after"`
 	LastError   string    `gorm:"size:600"                 json:"last_error,omitempty"`
+	// LeaseOwner and LeaseExpiresAt mark a live execution. A running job whose
+	// lease expired was interrupted by a crash or restart and is claimable
+	// again instead of being stranded.
+	LeaseOwner     string     `gorm:"size:120" json:"-"`
+	LeaseExpiresAt *time.Time `              json:"-"`
 }
 
 func (Job) TableName() string { return "collect_jobs" }

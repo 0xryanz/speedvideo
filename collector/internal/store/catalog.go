@@ -46,7 +46,10 @@ func (s *Store) UpsertTitle(
 	key := workKeyOf(item)
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var existing model.Item
+		var (
+			existing     model.Item
+			liveSiblings int64
+		)
 		itemErr := tx.Where("source_id = ? AND remote_id = ?", src.ID, item.RemoteID).
 			First(&existing).Error
 		if itemErr != nil && !errors.Is(itemErr, gorm.ErrRecordNotFound) {
@@ -59,6 +62,13 @@ func (s *Store) UpsertTitle(
 
 		switch {
 		case errors.Is(titleErr, gorm.ErrRecordNotFound):
+			// Only one row per work may be canonical. A brand-new work skips
+			// the expensive canonical refresh; a sibling (rare) still needs it.
+			if err := tx.Model(&model.Title{}).
+				Where("work_key = ? AND removed_at IS NULL", key).
+				Count(&liveSiblings).Error; err != nil {
+				return fmt.Errorf("count canonical siblings: %w", err)
+			}
 			title = model.Title{
 				ID:             uuid.NewString(),
 				Slug:           slugFor(src.Slug, item.RemoteID),
@@ -74,7 +84,7 @@ func (s *Store) UpsertTitle(
 				SourceID:       &src.ID,
 				RemoteID:       item.RemoteID,
 				WorkKey:        key,
-				Canonical:      true,
+				Canonical:      liveSiblings == 0,
 				Popularity:     50,
 				MatchPercent:   90,
 			}
@@ -129,7 +139,10 @@ func (s *Store) UpsertTitle(
 		if err := touchItem(tx, src.ID, item.RemoteID, title.ID, hash); err != nil {
 			return err
 		}
-		return refreshCanonical(tx, key)
+		if liveSiblings > 0 {
+			return refreshCanonical(tx, key)
+		}
+		return nil
 	})
 	if err != nil {
 		return "", OutcomeUnchanged, err
@@ -138,35 +151,33 @@ func (s *Store) UpsertTitle(
 }
 
 func touchItem(tx *gorm.DB, sourceID, remoteID, titleID, hash string) error {
-	var item model.Item
-	err := tx.Where("source_id = ? AND remote_id = ?", sourceID, remoteID).
-		First(&item).Error
 	now := time.Now().UTC()
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		item = model.Item{
-			ID:          uuid.NewString(),
-			SourceID:    sourceID,
-			RemoteID:    remoteID,
-			TitleID:     titleID,
-			ContentHash: hash,
-			LastSeenAt:  now,
-		}
-		if err := tx.Create(&item).Error; err != nil {
-			return fmt.Errorf("create collect item: %w", err)
-		}
+	// Update first: one statement for the common case, instead of SELECT+UPDATE.
+	result := tx.Model(&model.Item{}).
+		Where("source_id = ? AND remote_id = ?", sourceID, remoteID).
+		Updates(map[string]any{
+			"title_id":     titleID,
+			"content_hash": hash,
+			"last_seen_at": now,
+			"removed_at":   nil,
+			"updated_at":   now,
+		})
+	if result.Error != nil {
+		return fmt.Errorf("update collect item: %w", result.Error)
+	}
+	if result.RowsAffected > 0 {
 		return nil
 	}
-	if err != nil {
-		return fmt.Errorf("load collect item: %w", err)
+	item := model.Item{
+		ID:          uuid.NewString(),
+		SourceID:    sourceID,
+		RemoteID:    remoteID,
+		TitleID:     titleID,
+		ContentHash: hash,
+		LastSeenAt:  now,
 	}
-	if err := tx.Model(&item).Updates(map[string]any{
-		"title_id":     titleID,
-		"content_hash": hash,
-		"last_seen_at": now,
-		"removed_at":   nil,
-		"updated_at":   now,
-	}).Error; err != nil {
-		return fmt.Errorf("update collect item: %w", err)
+	if err := tx.Create(&item).Error; err != nil {
+		return fmt.Errorf("create collect item: %w", err)
 	}
 	return nil
 }
@@ -210,11 +221,14 @@ func replaceSeasons(tx *gorm.DB, titleID string, item *adapter.Title) error {
 		}
 	}
 	// Seasons must exist before their episodes: episodes hold the FK.
+	seasonRows := make([]model.Season, 0, len(numbers))
 	for _, number := range numbers {
-		if err := tx.Create(seasons[number]).Error; err != nil {
-			return fmt.Errorf("create season: %w", err)
-		}
+		seasonRows = append(seasonRows, *seasons[number])
 	}
+	if err := tx.CreateInBatches(seasonRows, 50).Error; err != nil {
+		return fmt.Errorf("create seasons: %w", err)
+	}
+	episodeRows := make([]model.Episode, 0, len(item.Episodes))
 	for _, episode := range item.Episodes {
 		if episode.URL == "" {
 			continue
@@ -223,17 +237,17 @@ func replaceSeasons(tx *gorm.DB, titleID string, item *adapter.Title) error {
 		if number < 1 {
 			number = 1
 		}
-		row := model.Episode{
+		episodeRows = append(episodeRows, model.Episode{
 			ID:        uuid.NewString(),
 			SeasonID:  seasons[number].ID,
 			Number:    episode.Number,
 			Name:      episode.Name,
 			StillPath: item.PosterURL,
 			VideoURL:  episode.URL,
-		}
-		if err := tx.Create(&row).Error; err != nil {
-			return fmt.Errorf("create episode: %w", err)
-		}
+		})
+	}
+	if err := tx.CreateInBatches(episodeRows, 200).Error; err != nil {
+		return fmt.Errorf("create episodes: %w", err)
 	}
 	return nil
 }
@@ -433,6 +447,32 @@ func slugify(raw string) string {
 		}
 	}
 	return strings.Trim(b.String(), "-")
+}
+
+// RecentlySeen returns the provider ids seen at or after `since` in one query.
+// Incremental scans use it to skip detail requests without N round trips.
+func (s *Store) RecentlySeen(
+	ctx context.Context,
+	sourceID string,
+	remoteIDs []string,
+	since time.Time,
+) (map[string]struct{}, error) {
+	out := make(map[string]struct{}, len(remoteIDs))
+	if len(remoteIDs) == 0 {
+		return out, nil
+	}
+	var ids []string
+	if err := s.db.WithContext(ctx).
+		Model(&model.Item{}).
+		Where("source_id = ? AND remote_id IN ?", sourceID, remoteIDs).
+		Where("removed_at IS NULL AND last_seen_at >= ?", since).
+		Pluck("remote_id", &ids).Error; err != nil {
+		return nil, fmt.Errorf("load recently seen items: %w", err)
+	}
+	for _, id := range ids {
+		out[id] = struct{}{}
+	}
+	return out, nil
 }
 
 // FindItem loads the change-detection row for a provider entry.
