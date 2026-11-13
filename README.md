@@ -1,6 +1,6 @@
 # SpeedVideo
 
-Netflix 风格的流媒体系统：Flutter 客户端 + Go API + 独立采集器 + React 控制台 + PostgreSQL。
+流媒体系统：Flutter 客户端 + Go API + 独立采集器 + React 控制台 + PostgreSQL。
 
 仓库不内置任何影视数据。新部署的片库是空的，由采集器从运营方有权使用的片库写入；
 **上线前必须替换为已授权素材与自有 CDN/DRM**。
@@ -9,7 +9,7 @@ Netflix 风格的流媒体系统：Flutter 客户端 + Go API + 独立采集器 
 
 | 目录 | 说明 | 文档 |
 |---|---|---|
-| [`app/`](app/README.md) | Flutter 客户端，iOS / Android / macOS / Web，访客可浏览播放 | [客户端说明](app/README.md) |
+| [`app/`](app/README.md) | Flutter 客户端，iOS / Android / Android TV / macOS / Windows / Web，访客可浏览播放 | [客户端说明](app/README.md) |
 | [`api/`](api/README.md) | Go 模块化单体，观看接口 + 采集控制面 + 数据库迁移 | [API 说明](api/README.md) |
 | [`collector/`](collector/README.md) | 独立采集进程，无 HTTP，从数据库领取任务 | [采集器说明](collector/README.md) |
 | [`admin/`](admin/README.md) | React 运营控制台，管理来源、任务与条目 | [控制台说明](admin/README.md) |

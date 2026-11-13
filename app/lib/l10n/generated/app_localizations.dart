@@ -389,7 +389,7 @@ abstract class AppLocalizations {
   /// No description provided for @myNetflix.
   ///
   /// In en, this message translates to:
-  /// **'My Netflix'**
+  /// **'My Space'**
   String get myNetflix;
 
   /// No description provided for @play.

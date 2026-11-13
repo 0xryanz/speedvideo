@@ -1,6 +1,6 @@
 # SpeedVideo App
 
-SpeedVideo 的 Flutter 客户端（iOS / Android / macOS / Windows / Web），Netflix 风格的深色界面，
+SpeedVideo 的 Flutter 客户端（iOS / Android / macOS / Windows / Web），深色流媒体界面，
 中英双语。默认以访客身份直接浏览和播放，账号功能在操作时提示登录。
 
 ## 功能
@@ -14,6 +14,8 @@ SpeedVideo 的 Flutter 客户端（iOS / Android / macOS / Windows / Web），Ne
 - 我的片单、个人资料切换、设置
 - 访客可浏览和播放；片单、下载、进度需要登录
 - 登录状态保存在 Keychain / Keystore，重启自动恢复
+- Android TV：Leanback 启动入口、横屏 10-foot 布局、左侧导航栏
+- 遥控器：方向键移动焦点，OK 确认；播放器内 OK 播放/暂停，左右键快退/快进 10 秒，返回键退出
 
 ## 技术栈
 
@@ -42,6 +44,15 @@ flutter run -d chrome  --dart-define=API_BASE_URL=http://localhost:8080
 ```
 
 Android 模拟器访问宿主机使用 `10.0.2.2`；生产构建必须使用 HTTPS。
+
+调试 Android TV 布局时，可以在手机或普通模拟器上强制开启 10-foot 界面：
+
+```bash
+flutter run -d emulator-5554 --dart-define=TV_MODE=true \
+  --dart-define=API_BASE_URL=http://10.0.2.2:8080
+```
+
+真实 Android TV 通过原生 `UiModeManager` 自动识别，不需要该开关。
 
 ## 目录
 

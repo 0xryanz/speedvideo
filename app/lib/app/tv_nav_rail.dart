@@ -37,8 +37,8 @@ class TvNavRail extends StatelessWidget {
         child: Column(
           children: [
             const Padding(
-              padding: EdgeInsets.fromLTRB(16, 18, 16, 26),
-              child: AppLogo(fontSize: 22),
+              padding: EdgeInsets.fromLTRB(8, 18, 8, 26),
+              child: FittedBox(child: AppLogo(fontSize: 22)),
             ),
             for (var i = 0; i < destinations.length; i++)
               Padding(

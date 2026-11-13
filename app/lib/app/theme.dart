@@ -36,7 +36,7 @@ WidgetStateProperty<Color?> _focusOverlay(Color color) {
   });
 }
 
-/// Netflix-adjacent visual language: black canvas, red accents, condensed
+/// Brand visual language: black canvas, red accents, condensed
 /// display type and quiet surfaces.
 ThemeData buildAppTheme() {
   final base = ThemeData.dark(useMaterial3: true);
@@ -174,13 +174,13 @@ ThemeData buildAppTheme() {
         minimumSize: const Size.fromHeight(52),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         textStyle: textTheme.labelLarge?.copyWith(fontSize: 16),
-      ).copyWith(overlayColor: _focusOverlay(Colors.white)),
+      ).copyWith(overlayColor: _focusOverlay(const Color(0x4D000000))),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: AppColors.textPrimary,
         textStyle: textTheme.labelLarge,
-      ).copyWith(overlayColor: _focusOverlay(AppColors.red)),
+      ).copyWith(overlayColor: _focusOverlay(const Color(0x66E50914))),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
@@ -189,7 +189,7 @@ ThemeData buildAppTheme() {
         minimumSize: const Size.fromHeight(52),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         textStyle: textTheme.labelLarge,
-      ).copyWith(overlayColor: _focusOverlay(AppColors.red)),
+      ).copyWith(overlayColor: _focusOverlay(const Color(0x66E50914))),
     ),
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(

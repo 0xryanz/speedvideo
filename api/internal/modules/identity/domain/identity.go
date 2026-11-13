@@ -20,7 +20,7 @@ type User struct {
 
 func (User) TableName() string { return "users" }
 
-// Profile is a Netflix-style viewing profile. All personalised state (watch
+// Profile is a viewing profile. All personalised state (watch
 // list, progress) is keyed by profile, never by account.
 type Profile struct {
 	model.Base

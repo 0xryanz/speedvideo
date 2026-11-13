@@ -158,7 +158,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get newHot => 'New & Hot';
 
   @override
-  String get myNetflix => 'My Netflix';
+  String get myNetflix => 'My Space';
 
   @override
   String get play => 'Play';

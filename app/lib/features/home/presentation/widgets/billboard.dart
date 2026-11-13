@@ -12,7 +12,7 @@ import '../../../library/presentation/library_providers.dart';
 
 /// Full-bleed hero used at the top of the home feed.
 ///
-/// Mirrors Netflix's current billboard: title art, metadata, and a single row
+/// Mirrors a streaming-service billboard: title art, metadata, and a single row
 /// of two equal-width actions (Play / My List). Tapping the artwork opens the
 /// title detail page.
 class Billboard extends ConsumerWidget {

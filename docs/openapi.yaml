@@ -3,7 +3,7 @@ info:
   title: SpeedVideo API
   version: 1.0.0
   description: |
-    Netflix-style streaming API. Bearer access tokens are short-lived (15 min
+    Streaming API. Bearer access tokens are short-lived (15 min
     by default) and refresh tokens rotate on every use. Personalised endpoints
     require a profile-scoped access token obtained from
     `POST /v1/profiles/{profileID}/select`.

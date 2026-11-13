@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../features/auth/domain/auth_models.dart';
 
-/// Netflix-style profile tile: a colour block with an initial. Avoids remote
+/// Profile tile: a colour block with an initial. Avoids remote
 /// avatar dependencies while still feeling personal.
 class ProfileAvatar extends StatelessWidget {
   const ProfileAvatar({

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:speedvideo/core/device/tv_mode.dart';
+import 'package:speedvideo/core/widgets/tv_focusable.dart';
 import 'package:speedvideo/features/catalog/domain/catalog_models.dart';
 import 'package:speedvideo/features/catalog/presentation/widgets/title_poster.dart';
 
@@ -48,6 +49,49 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tapped, ['two']);
+  });
+
+  testWidgets('arrow keys move focus without activating', (tester) async {
+    final taps = <String>[];
+    await tester.pumpWidget(
+      TvScope(
+        isTv: true,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                TvFocusable(
+                  autofocus: true,
+                  builder: (context, _) => const SizedBox(
+                    width: 100,
+                    height: 40,
+                    child: Text('first'),
+                  ),
+                  onActivate: () => taps.add('first'),
+                ),
+                TvFocusable(
+                  builder: (context, _) => const SizedBox(
+                    width: 100,
+                    height: 40,
+                    child: Text('second'),
+                  ),
+                  onActivate: () => taps.add('second'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(taps, isEmpty);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(taps, ['second']);
   });
 
   testWidgets('Enter also activates a focused poster', (tester) async {

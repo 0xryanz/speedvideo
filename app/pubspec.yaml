@@ -1,5 +1,5 @@
 name: speedvideo
-description: "SpeedVideo — a production-grade, Netflix-style streaming client."
+description: "SpeedVideo — a production-grade streaming client."
 publish_to: "none"
 version: 1.0.0+1
 

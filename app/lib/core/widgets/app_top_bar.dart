@@ -12,7 +12,7 @@ import 'tv_focusable.dart';
 
 /// Shared top bar: wordmark, search and the profile menu.
 ///
-/// Netflix keeps the same chrome on every signed-in tab, so search is never a
+/// The app keeps the same chrome on every signed-in tab, so search is never a
 /// separate bottom destination.
 class AppTopBar extends StatelessWidget {
   const AppTopBar({super.key, this.showBack = false, this.backFallback});
