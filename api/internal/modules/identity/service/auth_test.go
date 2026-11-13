@@ -200,6 +200,7 @@ func TestRegisterAndLogin(t *testing.T) {
 	stored, err := profiles.ListByUser(context.Background(), session.User.ID)
 	require.NoError(t, err)
 	require.Len(t, stored, 1)
+	require.Equal(t, "Ada", stored[0].Name)
 
 	login, err := svc.Login(context.Background(), "user@example.com", "Password123!", ClientMeta{})
 	require.NoError(t, err)
@@ -207,6 +208,22 @@ func TestRegisterAndLogin(t *testing.T) {
 
 	_, err = svc.Login(context.Background(), "user@example.com", "wrong-password", ClientMeta{})
 	require.Error(t, err)
+}
+
+func TestRegisterFallsBackToMemberProfileName(t *testing.T) {
+	svc, _, profiles, _, _ := newAuthFixture(t)
+	session, err := svc.Register(
+		context.Background(),
+		"nameless@example.com",
+		"Password123!",
+		"",
+		ClientMeta{},
+	)
+	require.NoError(t, err)
+	stored, err := profiles.ListByUser(context.Background(), session.User.ID)
+	require.NoError(t, err)
+	require.Len(t, stored, 1)
+	require.Equal(t, "Member", stored[0].Name)
 }
 
 func TestRefreshRotationDetectsReuse(t *testing.T) {

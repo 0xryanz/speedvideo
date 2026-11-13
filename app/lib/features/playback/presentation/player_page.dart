@@ -199,6 +199,8 @@ class _VideoPlayerViewState extends ConsumerState<_VideoPlayerView>
   bool _dragging = false;
   bool _autoAdvanced = false;
   bool _autoplayNext = true;
+  bool _fullscreen = false;
+  bool _tvDefaultsApplied = false;
   double? _dragValue;
   int _seekHint = 0;
   double _lastDoubleTapX = 0;
@@ -212,8 +214,21 @@ class _VideoPlayerViewState extends ConsumerState<_VideoPlayerView>
     WidgetsBinding.instance.addObserver(this);
     _autoplayNext =
         ref.read(sessionControllerProvider).activeProfile?.autoplayNext ?? true;
-    _enterFullscreen();
     _initialize();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Phones start in the normal page layout; the full-screen button opts in.
+    // Televisions have no window chrome to keep, so they stay immersive.
+    if (!_tvDefaultsApplied) {
+      _tvDefaultsApplied = true;
+      if (Responsive.isTv(context)) {
+        _fullscreen = true;
+        unawaited(_applySystemUi(fullscreen: true));
+      }
+    }
   }
 
   /// Playback must stop when the app is backgrounded: a hidden AVPlayer keeps
@@ -230,20 +245,27 @@ class _VideoPlayerViewState extends ConsumerState<_VideoPlayerView>
     }
   }
 
-  Future<void> _enterFullscreen() async {
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    await SystemChrome.setPreferredOrientations(const [
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+  Future<void> _applySystemUi({required bool fullscreen}) async {
+    await SystemChrome.setEnabledSystemUIMode(
+      fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+    );
+    await SystemChrome.setPreferredOrientations(
+      fullscreen
+          ? const [
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ]
+          : const [
+              DeviceOrientation.portraitUp,
+              DeviceOrientation.portraitDown,
+            ],
+    );
   }
 
-  Future<void> _restoreSystemUi() async {
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    await SystemChrome.setPreferredOrientations(const [
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+  Future<void> _toggleFullscreen() async {
+    final fullscreen = !_fullscreen;
+    setState(() => _fullscreen = fullscreen);
+    await _applySystemUi(fullscreen: fullscreen);
   }
 
   Future<void> _initialize() async {
@@ -347,7 +369,9 @@ class _VideoPlayerViewState extends ConsumerState<_VideoPlayerView>
       unawaited(controller.dispose());
     }
 
-    unawaited(_restoreSystemUi());
+    if (_fullscreen) {
+      unawaited(_applySystemUi(fullscreen: false));
+    }
     super.dispose();
   }
 
@@ -571,6 +595,20 @@ class _VideoPlayerViewState extends ConsumerState<_VideoPlayerView>
                                         ],
                                       ),
                                     ),
+                                    if (!Responsive.isTv(context))
+                                      IconButton(
+                                        onPressed: () =>
+                                            unawaited(_toggleFullscreen()),
+                                        icon: Icon(
+                                          _fullscreen
+                                              ? Icons.fullscreen_exit_rounded
+                                              : Icons.fullscreen_rounded,
+                                          size: 28,
+                                        ),
+                                        tooltip: _fullscreen
+                                            ? context.l10n.exitFullscreen
+                                            : context.l10n.fullscreen,
+                                      ),
                                   ],
                                 ),
                               ),

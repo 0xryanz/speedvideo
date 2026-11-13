@@ -67,14 +67,18 @@ class MyNetflixPage extends ConsumerWidget {
                     const SizedBox(height: 18),
                     Row(
                       children: [
-                        ProfileAvatar(profile: profile, size: 62),
+                        ProfileAvatar(
+                          profile: profile,
+                          name: session.accountName,
+                          size: 62,
+                        ),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                profile.name,
+                                session.accountName ?? profile.name,
                                 style: textTheme.headlineSmall,
                               ),
                               const SizedBox(height: 2),

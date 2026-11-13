@@ -93,16 +93,16 @@ class Billboard extends ConsumerWidget {
                           if (title.badges.any(
                             (badge) => badge.toLowerCase().contains('top'),
                           ))
-                            const _Badge(
-                              label: 'TOP 10',
+                            _Badge(
+                              label: context.l10n.top10Badge,
                               color: AppColors.red,
                               icon: Icons.trending_up_rounded,
                             ),
                           if (title.badges.any(
                             (badge) => badge.toLowerCase().contains('new'),
                           ))
-                            const _Badge(
-                              label: 'NEW',
+                            _Badge(
+                              label: context.l10n.newBadge,
                               color: AppColors.surfaceElevated,
                             ),
                         ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/l10n/l10n.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/async_view.dart';
 import '../../../catalog/presentation/widgets/title_poster.dart';
@@ -33,7 +34,7 @@ class TitleRow extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  row.title,
+                  homeRowTitle(context, row),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.headlineSmall,
@@ -68,6 +69,39 @@ class TitleRow extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// The API ships stable row ids with an English fallback title. Translating on
+/// the client keeps the feed in the language the viewer picked, including rows
+/// such as Top 10 that never contain provider text.
+String homeRowTitle(BuildContext context, HomeRow row) {
+  final l10n = context.l10n;
+  switch (row.id) {
+    case 'continue-watching':
+      return l10n.continueWatching;
+    case 'top-10':
+      return l10n.top10Today;
+    case 'new-releases':
+      return l10n.newReleases;
+    case 'my-list':
+      return l10n.myList;
+    case 'genre-sci-fi':
+      return l10n.genreSciFi;
+    case 'genre-thriller':
+      return l10n.genreThriller;
+    case 'genre-drama':
+      return l10n.genreDrama;
+    case 'genre-crime':
+      return l10n.genreCrime;
+    case 'genre-comedy':
+      return l10n.genreComedy;
+    case 'genre-animation':
+      return l10n.genreAnimation;
+    case 'genre-fantasy':
+      return l10n.genreFantasy;
+    default:
+      return row.title;
   }
 }
 

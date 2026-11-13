@@ -452,6 +452,60 @@ abstract class AppLocalizations {
   /// **'New Releases'**
   String get newReleases;
 
+  /// No description provided for @genreSciFi.
+  ///
+  /// In en, this message translates to:
+  /// **'Sci-Fi'**
+  String get genreSciFi;
+
+  /// No description provided for @genreThriller.
+  ///
+  /// In en, this message translates to:
+  /// **'Thriller'**
+  String get genreThriller;
+
+  /// No description provided for @genreDrama.
+  ///
+  /// In en, this message translates to:
+  /// **'Drama'**
+  String get genreDrama;
+
+  /// No description provided for @genreCrime.
+  ///
+  /// In en, this message translates to:
+  /// **'Crime'**
+  String get genreCrime;
+
+  /// No description provided for @genreComedy.
+  ///
+  /// In en, this message translates to:
+  /// **'Comedy'**
+  String get genreComedy;
+
+  /// No description provided for @genreAnimation.
+  ///
+  /// In en, this message translates to:
+  /// **'Animation'**
+  String get genreAnimation;
+
+  /// No description provided for @genreFantasy.
+  ///
+  /// In en, this message translates to:
+  /// **'Fantasy'**
+  String get genreFantasy;
+
+  /// No description provided for @top10Badge.
+  ///
+  /// In en, this message translates to:
+  /// **'TOP 10'**
+  String get top10Badge;
+
+  /// No description provided for @newBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'NEW'**
+  String get newBadge;
+
   /// No description provided for @myListTitle.
   ///
   /// In en, this message translates to:
@@ -632,6 +686,18 @@ abstract class AppLocalizations {
   /// **'This title can\'t be played right now.'**
   String get playerError;
 
+  /// No description provided for @fullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Full screen'**
+  String get fullscreen;
+
+  /// No description provided for @exitFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit full screen'**
+  String get exitFullscreen;
+
   /// No description provided for @nextEpisode.
   ///
   /// In en, this message translates to:
@@ -737,7 +803,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutBody.
   ///
   /// In en, this message translates to:
-  /// **'A streaming experience built with Flutter and Go.'**
+  /// **'Your own private cinema — discover new stories and pick up right where you left off.'**
   String get aboutBody;
 
   /// No description provided for @apiUnavailable.

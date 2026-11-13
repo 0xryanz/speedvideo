@@ -91,8 +91,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         children: [
           if (profile != null)
             ListTile(
-              leading: ProfileAvatar(profile: profile, size: 44),
-              title: Text(profile.name),
+              leading: ProfileAvatar(
+                profile: profile,
+                name: session.accountName,
+                size: 44,
+              ),
+              title: Text(session.accountName ?? profile.name),
               subtitle: Text(
                 profile.isKids
                     ? context.l10n.kidsProfile

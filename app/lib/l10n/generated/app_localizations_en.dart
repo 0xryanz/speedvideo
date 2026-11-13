@@ -193,6 +193,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get newReleases => 'New Releases';
 
   @override
+  String get genreSciFi => 'Sci-Fi';
+
+  @override
+  String get genreThriller => 'Thriller';
+
+  @override
+  String get genreDrama => 'Drama';
+
+  @override
+  String get genreCrime => 'Crime';
+
+  @override
+  String get genreComedy => 'Comedy';
+
+  @override
+  String get genreAnimation => 'Animation';
+
+  @override
+  String get genreFantasy => 'Fantasy';
+
+  @override
+  String get top10Badge => 'TOP 10';
+
+  @override
+  String get newBadge => 'NEW';
+
+  @override
   String get myListTitle => 'My List';
 
   @override
@@ -292,6 +319,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playerError => 'This title can\'t be played right now.';
 
   @override
+  String get fullscreen => 'Full screen';
+
+  @override
+  String get exitFullscreen => 'Exit full screen';
+
+  @override
   String get nextEpisode => 'Next Episode';
 
   @override
@@ -343,7 +376,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chinese => '简体中文';
 
   @override
-  String get aboutBody => 'A streaming experience built with Flutter and Go.';
+  String get aboutBody =>
+      'Your own private cinema — discover new stories and pick up right where you left off.';
 
   @override
   String get apiUnavailable => 'Can\'t reach SpeedVideo. Is the API running?';

@@ -85,7 +85,12 @@ func (r *Repository) Featured(ctx context.Context, kids bool) (*domain.Title, er
 
 // Popular returns the most popular titles.
 func (r *Repository) Popular(ctx context.Context, kids bool, limit int) ([]domain.Title, error) {
-	return r.list(ctx, kids, limit, "popularity DESC, release_year DESC")
+	return r.list(
+		ctx,
+		kids,
+		limit,
+		"popularity DESC, release_year DESC, created_at DESC, titles.id ASC",
+	)
 }
 
 // NewReleases returns the most recently released titles.
@@ -94,7 +99,12 @@ func (r *Repository) NewReleases(
 	kids bool,
 	limit int,
 ) ([]domain.Title, error) {
-	return r.list(ctx, kids, limit, "release_year DESC, popularity DESC")
+	return r.list(
+		ctx,
+		kids,
+		limit,
+		"release_year DESC, created_at DESC, popularity DESC, titles.id ASC",
+	)
 }
 
 // ByGenre returns popular titles within a genre slug.
@@ -113,7 +123,7 @@ func (r *Repository) ByGenre(
 	if kids {
 		query = query.Where("titles.maturity_rating IN ?", domain.KidsSafeRatings)
 	}
-	if err := query.Order("titles.popularity DESC").Group("titles.id").Limit(limit).Find(&titles).Error; err != nil {
+	if err := query.Order("titles.popularity DESC, titles.release_year DESC, titles.created_at DESC, titles.id ASC").Group("titles.id").Limit(limit).Find(&titles).Error; err != nil {
 		return nil, fmt.Errorf("load genre titles: %w", err)
 	}
 	return titles, nil

@@ -78,6 +78,12 @@ func (s *AuthService) Register(
 	if displayName == "" {
 		displayName = "Member"
 	}
+	// The first profile carries the viewer's own name; "You" would make the
+	// profile picker and the account header read like placeholders.
+	profileName := displayName
+	if runes := []rune(profileName); len(runes) > 60 {
+		profileName = string(runes[:60])
+	}
 	hash, err := security.HashPassword(password)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
@@ -90,7 +96,7 @@ func (s *AuthService) Register(
 		Role:         "member",
 	}
 	profile := &domain.Profile{
-		Name:             "You",
+		Name:             profileName,
 		AvatarColor:      "#E50914",
 		IsKids:           false,
 		Language:         "en",

@@ -190,6 +190,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get newReleases => '新片上线';
 
   @override
+  String get genreSciFi => '科幻';
+
+  @override
+  String get genreThriller => '惊悚';
+
+  @override
+  String get genreDrama => '剧情';
+
+  @override
+  String get genreCrime => '犯罪';
+
+  @override
+  String get genreComedy => '喜剧';
+
+  @override
+  String get genreAnimation => '动画';
+
+  @override
+  String get genreFantasy => '奇幻';
+
+  @override
+  String get top10Badge => 'TOP 10';
+
+  @override
+  String get newBadge => '新';
+
+  @override
   String get myListTitle => '我的片单';
 
   @override
@@ -288,6 +315,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playerError => '暂时无法播放该内容。';
 
   @override
+  String get fullscreen => '全屏';
+
+  @override
+  String get exitFullscreen => '退出全屏';
+
+  @override
   String get nextEpisode => '下一集';
 
   @override
@@ -339,7 +372,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chinese => '简体中文';
 
   @override
-  String get aboutBody => '使用 Flutter 与 Go 打造的流媒体体验。';
+  String get aboutBody => '属于你的私人影院——随时发现新故事，也能从上次停下的地方继续。';
 
   @override
   String get apiUnavailable => '无法连接 SpeedVideo，请确认 API 已启动。';

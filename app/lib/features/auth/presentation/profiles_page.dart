@@ -69,12 +69,13 @@ class _ProfilesPageState extends ConsumerState<ProfilesPage> {
 
   Future<void> _addProfile() async {
     final session = ref.read(sessionControllerProvider);
-    final draft = await showDialog<_ProfileDraft>(
+    final result = await showDialog<_ProfileDialogResult>(
       context: context,
       builder: (_) => _ProfileDialog(
         title: context.l10n.addProfile,
       ),
     );
+    final draft = result?.draft;
     if (draft == null) return;
     try {
       await ref
@@ -96,11 +97,13 @@ class _ProfilesPageState extends ConsumerState<ProfilesPage> {
   }
 
   Future<void> _editProfile(Profile profile) async {
+    final displayName = ref.read(sessionControllerProvider).nameFor(profile);
     final result = await showDialog<_ProfileDialogResult>(
       context: context,
       builder: (_) => _ProfileDialog(
         title: context.l10n.editProfile,
         profile: profile,
+        initialName: displayName,
         allowDelete: true,
       ),
     );
@@ -176,6 +179,7 @@ class _ProfilesPageState extends ConsumerState<ProfilesPage> {
                           for (var i = 0; i < profiles.length; i++)
                             _ProfileTile(
                               profile: profiles[i],
+                              displayName: session.nameFor(profiles[i]),
                               managing: _managing,
                               busy: _busyProfileId == profiles[i].id,
                               autofocus: Responsive.isTv(context) && i == 0,
@@ -233,6 +237,7 @@ class _ProfilesPageState extends ConsumerState<ProfilesPage> {
 class _ProfileTile extends StatelessWidget {
   const _ProfileTile({
     required this.profile,
+    required this.displayName,
     required this.managing,
     required this.busy,
     required this.onTap,
@@ -240,6 +245,7 @@ class _ProfileTile extends StatelessWidget {
   });
 
   final Profile profile;
+  final String displayName;
   final bool managing;
   final bool busy;
   final VoidCallback onTap;
@@ -261,7 +267,11 @@ class _ProfileTile extends StatelessWidget {
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  ProfileAvatar(profile: profile, size: 96),
+                  ProfileAvatar(
+                    profile: profile,
+                    name: displayName,
+                    size: 96,
+                  ),
                   if (managing)
                     Positioned.fill(
                       child: DecoratedBox(
@@ -276,7 +286,7 @@ class _ProfileTile extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                profile.name,
+                displayName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -369,11 +379,13 @@ class _ProfileDialog extends StatefulWidget {
   const _ProfileDialog({
     required this.title,
     this.profile,
+    this.initialName,
     this.allowDelete = false,
   });
 
   final String title;
   final Profile? profile;
+  final String? initialName;
   final bool allowDelete;
 
   @override
@@ -389,7 +401,9 @@ class _ProfileDialogState extends State<_ProfileDialog> {
   @override
   void initState() {
     super.initState();
-    _name = TextEditingController(text: widget.profile?.name ?? '');
+    _name = TextEditingController(
+      text: widget.initialName ?? widget.profile?.name ?? '',
+    );
     _isKids = widget.profile?.isKids ?? false;
     _color = widget.profile?.avatarColor ?? _avatarColors.first;
   }
@@ -419,7 +433,9 @@ class _ProfileDialogState extends State<_ProfileDialog> {
       builder: (dialogContext) => AlertDialog(
         title: Text(context.l10n.deleteProfileTitle),
         content: Text(
-          context.l10n.deleteProfileMessage(widget.profile!.name),
+          context.l10n.deleteProfileMessage(
+            widget.initialName ?? widget.profile!.name,
+          ),
         ),
         actions: [
           TextButton(

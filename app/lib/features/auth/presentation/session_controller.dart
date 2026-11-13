@@ -41,6 +41,27 @@ class SessionState {
     return null;
   }
 
+  /// Name shown for the signed-in account.
+  ///
+  /// The API names a new account's first profile "You" before it knows what to
+  /// call the viewer. Once registration stored a nickname, that is the name the
+  /// viewer expects to see, so it replaces the placeholder.
+  String? get accountName {
+    final profile = activeProfile;
+    return profile == null ? null : nameFor(profile);
+  }
+
+  /// Resolves the label and avatar initial for [profile].
+  ///
+  /// Custom profile names win; only the default "You" placeholder is replaced
+  /// by the account nickname. Kids profiles keep their own name and icon.
+  String nameFor(Profile profile) {
+    final name = profile.name.trim();
+    if (profile.isKids || name.toLowerCase() != 'you') return profile.name;
+    final nickname = user?.displayName.trim() ?? '';
+    return nickname.isEmpty ? profile.name : nickname;
+  }
+
   SessionState copyWith({
     SessionStatus? status,
     User? user,

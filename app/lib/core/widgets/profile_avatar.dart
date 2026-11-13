@@ -11,18 +11,21 @@ class ProfileAvatar extends StatelessWidget {
     super.key,
     this.size = 84,
     this.selected = false,
+    this.name,
   });
 
   final Profile profile;
   final double size;
   final bool selected;
 
+  /// Optional display name; the profile name is used when omitted.
+  final String? name;
+
   @override
   Widget build(BuildContext context) {
     final color = _parseColor(profile.avatarColor);
-    final initial = profile.name.trim().isEmpty
-        ? '?'
-        : profile.name.trim().substring(0, 1).toUpperCase();
+    final label = (name ?? profile.name).trim();
+    final initial = label.isEmpty ? '?' : label.substring(0, 1).toUpperCase();
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       width: size,

@@ -67,9 +67,8 @@ class _ProfileMenuButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(
-      sessionControllerProvider.select((session) => session.activeProfile),
-    );
+    final session = ref.watch(sessionControllerProvider);
+    final profile = session.activeProfile;
     if (profile == null) {
       return IconButton(
         onPressed: () => context.push('/login'),
@@ -80,6 +79,7 @@ class _ProfileMenuButton extends ConsumerWidget {
         tooltip: context.l10n.signIn,
       );
     }
+    final name = session.nameFor(profile);
     final size = Responsive.isTv(context) ? 34.0 : 30.0;
     return TvFocusable(
       borderRadius: size / 2 + 4,
@@ -88,7 +88,7 @@ class _ProfileMenuButton extends ConsumerWidget {
       builder: (context, _) {
         return Padding(
           padding: const EdgeInsets.all(4),
-          child: ProfileAvatar(profile: profile, size: size),
+          child: ProfileAvatar(profile: profile, name: name, size: size),
         );
       },
     );
@@ -97,6 +97,7 @@ class _ProfileMenuButton extends ConsumerWidget {
   Future<void> _openMenu(BuildContext context, WidgetRef ref) {
     final session = ref.read(sessionControllerProvider);
     final profile = session.activeProfile;
+    final name = profile == null ? null : session.nameFor(profile);
     return showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surface,
@@ -110,8 +111,12 @@ class _ProfileMenuButton extends ConsumerWidget {
               children: [
                 if (profile != null)
                   ListTile(
-                    leading: ProfileAvatar(profile: profile, size: 40),
-                    title: Text(profile.name),
+                    leading: ProfileAvatar(
+                      profile: profile,
+                      name: name,
+                      size: 40,
+                    ),
+                    title: Text(name ?? profile.name),
                     subtitle: Text(
                       profile.isKids
                           ? context.l10n.kidsProfile
